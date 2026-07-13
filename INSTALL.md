@@ -1,0 +1,95 @@
+# Install
+
+This sets up automatic syncing of your Instagram saved posts into a Notion database, running on a daily schedule via macOS launchd. macOS only.
+
+## Step 1 - Prerequisites
+
+Gather these before continuing.
+
+**Instagram sessionid, csrftoken, and user id:**
+1. Open Chrome, log in to instagram.com.
+2. Press Cmd+Option+I to open DevTools.
+3. Go to the Application tab.
+4. In the left sidebar, expand Cookies and select `https://www.instagram.com`.
+5. Copy the Value column for these three cookies: `sessionid`, `csrftoken`, and `ds_user_id`.
+
+**Notion integration token:**
+1. Go to notion.so/profile/integrations.
+2. Click New integration, name it "Instagram Saves".
+3. Under Capabilities, enable Read content, Insert content, and Update content.
+4. Copy the Internal Integration Secret (starts with `ntn_`).
+
+## Step 2 - Provision the Notion database
+
+Ask the user: do you already have a Notion database set up for this with the required schema below, and do you want to reuse it?
+
+- If yes: get the database id and skip to the connection step below.
+- If no: create a new database in the user's Notion (via a connected Notion integration if available, otherwise give the user manual create-it steps) with EXACTLY these properties:
+  - `Name` (title)
+  - `URL` (url)
+  - `Type` (select)
+  - `Author` (text / rich_text)
+  - `Status` (select)
+  - `Media ID` (text / rich_text)
+  - `Saved` (date)
+  - `Caption` (text / rich_text)
+  - `Collection` (select)
+
+IMPORTANT: whether the database is new or existing, the integration must be connected to it. In Notion: open the database, click the `...` menu, go to Connections, and add the "Instagram Saves" integration.
+
+Capture the resulting database id (from the database URL or share link) before moving on.
+
+## Step 3 - Configure
+
+Copy `config.example.json` to `config.json`.
+
+Ask the user for each of these choices one at a time. Offer the default, never assume:
+
+1. **Which saved collections to sync?** All of them (default: leave `collections_filter` as `[]`), or specific ones (ask for the exact Instagram collection names as a JSON array).
+2. **What times should the daily sync run?** Default: 9am and 9pm (21:00). These become `{{HOUR_1}}` and `{{HOUR_2}}` in the scheduler.
+
+Write into `config.json`:
+- `ig_session_id`
+- `ig_csrftoken`
+- `ig_user_id`
+- `notion_token`
+- `notion_database_id`
+- `collections_filter`
+
+## Step 4 - Install runtime
+
+```
+python3 -m venv .venv
+.venv/bin/pip install -r requirements.txt
+```
+
+## Step 5 - Render the scheduler
+
+From `instagram-saves-sync.plist.template`, replace:
+- `{{APP_LABEL}}` with `com.instagram-saves-sync` (or a label the user prefers)
+- `{{PYTHON_PATH}}` with the absolute path to `<install-dir>/.venv/bin/python3`
+- `{{INSTALL_DIR}}` with the absolute path to the install directory
+- `{{HOUR_1}}` and `{{HOUR_2}}` with the chosen sync hours (from Step 3)
+
+Write the rendered file to `~/Library/LaunchAgents/<label>.plist` and load it:
+
+```
+launchctl load ~/Library/LaunchAgents/<label>.plist
+```
+
+## Step 6 - Verify
+
+Run one sync manually:
+
+```
+.venv/bin/python3 sync.py
+```
+
+Confirm it logs "Logged in as @..." and completes without errors.
+
+Note: the scheduler only runs when the Mac is awake at the scheduled time.
+
+## Troubleshooting
+
+- Instagram session invalid: refresh `ig_session_id` and `ig_csrftoken` from Chrome cookies (Step 1) and update `config.json`.
+- Notion sync fails: confirm the integration is connected to the database (Step 2, Connections menu).

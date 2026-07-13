@@ -1,0 +1,8 @@
+{
+  "ig_session_id": "PASTE_YOUR_INSTAGRAM_SESSIONID_HERE",
+  "ig_csrftoken": "PASTE_YOUR_INSTAGRAM_CSRFTOKEN_HERE",
+  "ig_user_id": "PASTE_YOUR_INSTAGRAM_USER_ID_HERE",
+  "notion_token": "PASTE_YOUR_NOTION_INTEGRATION_TOKEN_HERE",
+  "notion_database_id": "PASTE_DATABASE_ID_CREATED_DURING_SETUP_HERE",
+  "collections_filter": []
+}
