@@ -123,10 +123,16 @@ def test_session(session):
     return None
 
 
-def fetch_saved_posts(session, max_pages=50):
-    """Fetch all saved posts using Instagram's web REST API."""
+def fetch_saved_posts(session, known_ids=None, max_pages=50):
+    """Fetch saved posts using Instagram's web REST API.
+
+    Instagram returns saves newest-first. When known_ids is given, stop as
+    soon as a full page contains nothing new: everything older is already
+    synced, so a routine daily run only fetches the first page or two.
+    """
     all_items = []
     max_id = None
+    known_ids = known_ids or set()
 
     for page in range(max_pages):
         params = {"count": "50"}
@@ -146,6 +152,15 @@ def fetch_saved_posts(session, max_pages=50):
 
         if not data.get("more_available", False):
             break
+
+        if known_ids and items:
+            page_ids = {
+                str(item.get("media", item).get("pk", item.get("media", item).get("id", "")))
+                for item in items
+            }
+            if page_ids <= known_ids:
+                log.info("  Reached posts already in Notion; stopping pagination")
+                break
 
         max_id = data.get("next_max_id")
         if not max_id:
@@ -350,7 +365,7 @@ def sync():
 
     # Fetch all saved posts
     log.info("Fetching saved posts...")
-    all_items = fetch_saved_posts(session)
+    all_items = fetch_saved_posts(session, known_ids=synced_ids)
     log.info(f"Total saved items: {len(all_items)}")
 
     new_count = 0
