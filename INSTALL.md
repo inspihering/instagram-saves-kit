@@ -89,6 +89,35 @@ Confirm it logs "Logged in as @..." and completes without errors.
 
 Note: the scheduler only runs when the Mac is awake at the scheduled time.
 
+## Cloud sync (optional, runs without the Mac)
+
+The repository ships a GitHub Actions workflow, `.github/workflows/daily-sync.yml`,
+that runs the same `sync.py` once a day from GitHub's servers. It reads
+credentials from repository secrets instead of `config.json`.
+
+1. On GitHub open the repository, then Settings, then Secrets and variables, then
+   Actions. Add these repository secrets with the same values as `config.json`:
+   - `IG_SESSION_ID`
+   - `IG_CSRFTOKEN`
+   - `IG_USER_ID`
+   - `NOTION_TOKEN`
+   - `NOTION_DATABASE_ID`
+2. Optional: under the Variables tab add `COLLECTIONS_FILTER` as a JSON array,
+   for example `["Inspo","Tools"]`. Leave it unset to sync every collection.
+3. The workflow must live on the default branch to run on its schedule. Open the
+   Actions tab, pick "Daily Instagram sync", and use "Run workflow" once to
+   confirm it goes green.
+
+The workflow runs at 10:30 UTC. Because the sync dedupes against Notion, the
+Mac schedule can stay on as a backup, but the Mac must be running this version
+of `sync.py` (or later). An older copy that only checks `state.json` will
+create duplicates of posts the cloud synced first.
+
+When the Instagram cookies expire, update both `config.json` on the Mac and the
+two GitHub secrets.
+
+The daily digest email is a separate scheduled Claude session; see `DIGEST.md`.
+
 ## Troubleshooting
 
 - Instagram session invalid: refresh `ig_session_id` and `ig_csrftoken` from Chrome cookies (Step 1) and update `config.json`.

@@ -10,6 +10,7 @@ the mobile/private API, so a web session cookie is sufficient.
 """
 
 import json
+import os
 import sys
 import logging
 import time
@@ -41,13 +42,39 @@ logging.basicConfig(
 log = logging.getLogger(__name__)
 
 
+# Environment variable fallback (used by the GitHub Actions cloud sync,
+# where there is no config.json). Each maps to the same-named config key.
+ENV_KEYS = {
+    "ig_session_id": "IG_SESSION_ID",
+    "ig_csrftoken": "IG_CSRFTOKEN",
+    "ig_user_id": "IG_USER_ID",
+    "notion_token": "NOTION_TOKEN",
+    "notion_database_id": "NOTION_DATABASE_ID",
+}
+
+
 def load_config():
-    if not CONFIG_FILE.exists():
+    if CONFIG_FILE.exists():
+        with open(CONFIG_FILE) as f:
+            return json.load(f)
+
+    config = {key: os.environ.get(env, "") for key, env in ENV_KEYS.items()}
+    missing = [env for key, env in ENV_KEYS.items() if not config[key]]
+    if missing:
         log.error(f"Config file not found: {CONFIG_FILE}")
-        log.error("Copy config.example.json to config.json and fill in your credentials.")
+        log.error("Copy config.example.json to config.json and fill in your credentials,")
+        log.error(f"or set environment variables: {', '.join(ENV_KEYS.values())}")
+        log.error(f"Missing: {', '.join(missing)}")
         sys.exit(1)
-    with open(CONFIG_FILE) as f:
-        return json.load(f)
+
+    raw_filter = os.environ.get("COLLECTIONS_FILTER", "").strip()
+    try:
+        config["collections_filter"] = json.loads(raw_filter) if raw_filter else []
+    except json.JSONDecodeError:
+        log.error('COLLECTIONS_FILTER must be a JSON array, e.g. ["Inspo","Tools"]')
+        sys.exit(1)
+    log.info("Loaded config from environment variables")
+    return config
 
 
 def load_state():
@@ -192,7 +219,41 @@ def get_media_caption(media):
     return text[:1900]
 
 
-def add_to_notion(notion, database_id, media, collection_name=None):
+def resolve_data_source_id(notion, database_id):
+    """Return the data source id behind a database (Notion API 2025-09-03)."""
+    db = notion.databases.retrieve(database_id=database_id)
+    sources = db.get("data_sources") or []
+    if not sources:
+        log.error("Notion database has no data sources. Is the integration connected to it?")
+        sys.exit(1)
+    return sources[0]["id"]
+
+
+def fetch_notion_media_ids(notion, data_source_id):
+    """Read every Media ID already in the Notion database.
+
+    This makes the sync safe to run from more than one machine (the Mac
+    schedule and the cloud schedule) without creating duplicate pages.
+    """
+    ids = set()
+    cursor = None
+    while True:
+        kwargs = {"data_source_id": data_source_id, "page_size": 100}
+        if cursor:
+            kwargs["start_cursor"] = cursor
+        resp = notion.data_sources.query(**kwargs)
+        for page in resp.get("results", []):
+            rich = page.get("properties", {}).get("Media ID", {}).get("rich_text", [])
+            text = "".join(part.get("plain_text", "") for part in rich).strip()
+            if text:
+                ids.add(text)
+        if not resp.get("has_more"):
+            break
+        cursor = resp.get("next_cursor")
+    return ids
+
+
+def add_to_notion(notion, data_source_id, media, collection_name=None):
     """Create a new page in the Notion database for a saved post."""
     media_type = get_media_type(media)
     url = get_media_url(media)
@@ -223,7 +284,7 @@ def add_to_notion(notion, database_id, media, collection_name=None):
             "select": {"name": collection_name}
         }
 
-    notion.pages.create(parent={"database_id": database_id}, properties=properties)
+    notion.pages.create(parent={"data_source_id": data_source_id}, properties=properties)
 
 
 def sync():
@@ -248,9 +309,18 @@ def sync():
         sys.exit(1)
     log.info(f"Logged in as @{username}")
 
-    # Connect to Notion
+    # Connect to Notion and learn what is already there
     notion = NotionClient(auth=config["notion_token"])
     database_id = config["notion_database_id"]
+    data_source_id = resolve_data_source_id(notion, database_id)
+    try:
+        notion_ids = fetch_notion_media_ids(notion, data_source_id)
+    except Exception as e:
+        log.error(f"Could not read existing posts from Notion: {e}")
+        log.error("Check notion_token and that the integration is connected to the database.")
+        sys.exit(1)
+    log.info(f"Notion already holds {len(notion_ids)} posts; local state knows {len(synced_ids)}")
+    synced_ids |= notion_ids
 
     # Build collection filter
     filter_names = config.get("collections_filter", [])
@@ -301,7 +371,7 @@ def sync():
             coll_name = ", ".join(names) if names else None
 
         try:
-            add_to_notion(notion, database_id, media, coll_name)
+            add_to_notion(notion, data_source_id, media, coll_name)
             synced_ids.add(media_id)
             new_count += 1
             log.info(
