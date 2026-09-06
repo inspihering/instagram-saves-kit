@@ -29,6 +29,7 @@ LOG_FILE = SCRIPT_DIR / "sync.log"
 # Instagram web API constants
 IG_BASE = "https://www.instagram.com"
 IG_APP_ID = "936619743392459"
+IG_TIMEOUT = 30  # seconds per HTTP request; a hung request should not stall a scheduled run
 
 # Logging
 logging.basicConfig(
@@ -53,12 +54,18 @@ ENV_KEYS = {
 }
 
 
+def _clean(config):
+    """Strip stray whitespace/newlines that sneak in when values are pasted."""
+    return {k: (v.strip() if isinstance(v, str) else v) for k, v in config.items()}
+
+
 def load_config():
     if CONFIG_FILE.exists():
         with open(CONFIG_FILE) as f:
-            return json.load(f)
+            return _clean(json.load(f))
 
     config = {key: os.environ.get(env, "") for key, env in ENV_KEYS.items()}
+    config = _clean(config)
     missing = [env for key, env in ENV_KEYS.items() if not config[key]]
     if missing:
         log.error(f"Config file not found: {CONFIG_FILE}")
@@ -108,7 +115,7 @@ def make_ig_session(config):
 
 def test_session(session):
     """Test if the Instagram session is valid."""
-    resp = session.get(f"{IG_BASE}/api/v1/accounts/edit/web_form_data/")
+    resp = session.get(f"{IG_BASE}/api/v1/accounts/edit/web_form_data/", timeout=IG_TIMEOUT)
     if resp.status_code == 200:
         data = resp.json()
         username = data.get("form_data", {}).get("username", "unknown")
@@ -116,17 +123,23 @@ def test_session(session):
     return None
 
 
-def fetch_saved_posts(session, max_pages=50):
-    """Fetch all saved posts using Instagram's web REST API."""
+def fetch_saved_posts(session, known_ids=None, max_pages=200):
+    """Fetch saved posts using Instagram's web REST API.
+
+    Instagram returns saves newest-first. When known_ids is given, stop as
+    soon as a full page contains nothing new: everything older is already
+    synced, so a routine daily run only fetches the first page or two.
+    """
     all_items = []
     max_id = None
+    known_ids = known_ids or set()
 
     for page in range(max_pages):
         params = {"count": "50"}
         if max_id:
             params["max_id"] = max_id
 
-        resp = session.get(f"{IG_BASE}/api/v1/feed/saved/posts/", params=params)
+        resp = session.get(f"{IG_BASE}/api/v1/feed/saved/posts/", params=params, timeout=IG_TIMEOUT)
         if resp.status_code != 200:
             log.error(f"Failed to fetch saved posts (page {page + 1}): HTTP {resp.status_code}")
             log.error(f"Response: {resp.text[:300]}")
@@ -139,6 +152,15 @@ def fetch_saved_posts(session, max_pages=50):
 
         if not data.get("more_available", False):
             break
+
+        if known_ids and items:
+            page_ids = {
+                str(item.get("media", item).get("pk", item.get("media", item).get("id", "")))
+                for item in items
+            }
+            if page_ids <= known_ids:
+                log.info("  Reached posts already in Notion; stopping pagination")
+                break
 
         max_id = data.get("next_max_id")
         if not max_id:
@@ -156,7 +178,7 @@ def fetch_collection_map(session):
         "get_cover_media_lists": "true",
         "include_public_only": "0",
     }
-    resp = session.get(f"{IG_BASE}/api/v1/collections/list/", params=params)
+    resp = session.get(f"{IG_BASE}/api/v1/collections/list/", params=params, timeout=IG_TIMEOUT)
     if resp.status_code != 200:
         log.warning(f"Failed to fetch collections: HTTP {resp.status_code}")
         return {}
@@ -341,9 +363,16 @@ def sync():
             log.error("No matching collections found. Check collections_filter in config.json.")
             sys.exit(1)
 
-    # Fetch all saved posts
-    log.info("Fetching saved posts...")
-    all_items = fetch_saved_posts(session)
+    # Fetch saved posts. A normal run stops at the first page that is fully
+    # synced. FULL_SYNC=1 walks the whole list, which is needed to finish a
+    # backfill that was interrupted part-way through.
+    full_sync = os.environ.get("FULL_SYNC", "").strip().lower() in ("1", "true", "yes")
+    if full_sync:
+        log.info("Fetching saved posts (full walk, FULL_SYNC set)...")
+        all_items = fetch_saved_posts(session)
+    else:
+        log.info("Fetching saved posts...")
+        all_items = fetch_saved_posts(session, known_ids=synced_ids)
     log.info(f"Total saved items: {len(all_items)}")
 
     new_count = 0
