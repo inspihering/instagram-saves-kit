@@ -53,6 +53,10 @@ ENV_KEYS = {
     "notion_database_id": "NOTION_DATABASE_ID",
 }
 
+# Only the newest N saved posts are considered. Instagram lists saves
+# newest-first, so this is "the most recent N saves". 0 means no limit.
+DEFAULT_MAX_SAVES = 500
+
 
 def _clean(config):
     """Strip stray whitespace/newlines that sneak in when values are pasted."""
@@ -80,6 +84,9 @@ def load_config():
     except json.JSONDecodeError:
         log.error('COLLECTIONS_FILTER must be a JSON array, e.g. ["Inspo","Tools"]')
         sys.exit(1)
+    raw_max = os.environ.get("MAX_SAVES", "").strip()
+    if raw_max:
+        config["max_saves"] = int(raw_max)
     log.info("Loaded config from environment variables")
     return config
 
@@ -123,12 +130,13 @@ def test_session(session):
     return None
 
 
-def fetch_saved_posts(session, known_ids=None, max_pages=200):
+def fetch_saved_posts(session, known_ids=None, max_pages=200, max_items=0):
     """Fetch saved posts using Instagram's web REST API.
 
     Instagram returns saves newest-first. When known_ids is given, stop as
     soon as a full page contains nothing new: everything older is already
     synced, so a routine daily run only fetches the first page or two.
+    When max_items is set, never look past the newest max_items saves.
     """
     all_items = []
     max_id = None
@@ -149,6 +157,11 @@ def fetch_saved_posts(session, known_ids=None, max_pages=200):
         items = data.get("items", [])
         all_items.extend(items)
         log.info(f"  Page {page + 1}: {len(items)} items (total: {len(all_items)})")
+
+        if max_items and len(all_items) >= max_items:
+            all_items = all_items[:max_items]
+            log.info(f"  Reached the newest {max_items} saves; stopping pagination")
+            break
 
         if not data.get("more_available", False):
             break
@@ -367,12 +380,13 @@ def sync():
     # synced. FULL_SYNC=1 walks the whole list, which is needed to finish a
     # backfill that was interrupted part-way through.
     full_sync = os.environ.get("FULL_SYNC", "").strip().lower() in ("1", "true", "yes")
+    max_saves = int(config.get("max_saves", DEFAULT_MAX_SAVES) or 0)
     if full_sync:
-        log.info("Fetching saved posts (full walk, FULL_SYNC set)...")
-        all_items = fetch_saved_posts(session)
+        log.info(f"Fetching saved posts (full walk of the newest {max_saves or 'all'})...")
+        all_items = fetch_saved_posts(session, max_items=max_saves)
     else:
-        log.info("Fetching saved posts...")
-        all_items = fetch_saved_posts(session, known_ids=synced_ids)
+        log.info(f"Fetching saved posts (newest {max_saves or 'all'})...")
+        all_items = fetch_saved_posts(session, known_ids=synced_ids, max_items=max_saves)
     log.info(f"Total saved items: {len(all_items)}")
 
     new_count = 0
