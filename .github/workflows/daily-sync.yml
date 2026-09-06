@@ -43,7 +43,6 @@ jobs:
           NOTION_TOKEN: ${{ secrets.NOTION_TOKEN }}
           NOTION_DATABASE_ID: ${{ secrets.NOTION_DATABASE_ID }}
           COLLECTIONS_FILTER: ${{ vars.COLLECTIONS_FILTER }}
-          MAX_SAVES: ${{ vars.MAX_SAVES }}
           FULL_SYNC: ${{ inputs.full_sync == true && '1' || '' }}
         run: python3 sync.py
 

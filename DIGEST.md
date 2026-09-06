@@ -54,9 +54,9 @@ places never creates duplicate pages.
 
 About 2,100 historical saves were imported during setup and left in the
 database on purpose. The digest ignores anything with a `Saved` date before
-2026-09-07, so it only ever covers posts saved from that day on. The sync is
-capped to the newest 500 saves (`max_saves` / `MAX_SAVES`), so it only adds
-genuinely new posts going forward.
+2026-09-07, so it only ever covers posts saved from that day on. The sync
+reads from the top of the saved list and stops at the first page Notion
+already has, so it only adds posts saved since the last run.
 
 ## Rules the digest session follows
 
