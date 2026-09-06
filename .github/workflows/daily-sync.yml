@@ -12,6 +12,10 @@ on:
         description: "Walk the entire saved list instead of stopping at already-synced posts"
         type: boolean
         default: false
+      dedupe:
+        description: "Maintenance: archive duplicate posts (same URL) instead of syncing"
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -35,7 +39,18 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
+      - name: Archive duplicate posts
+        if: ${{ inputs.dedupe == true }}
+        env:
+          NOTION_TOKEN: ${{ secrets.NOTION_TOKEN }}
+          NOTION_DATABASE_ID: ${{ secrets.NOTION_DATABASE_ID }}
+          IG_SESSION_ID: unused
+          IG_CSRFTOKEN: unused
+          IG_USER_ID: unused
+        run: python3 dedupe.py
+
       - name: Sync saved posts to Notion
+        if: ${{ inputs.dedupe != true }}
         env:
           IG_SESSION_ID: ${{ secrets.IG_SESSION_ID }}
           IG_CSRFTOKEN: ${{ secrets.IG_CSRFTOKEN }}
@@ -43,6 +58,7 @@ jobs:
           NOTION_TOKEN: ${{ secrets.NOTION_TOKEN }}
           NOTION_DATABASE_ID: ${{ secrets.NOTION_DATABASE_ID }}
           COLLECTIONS_FILTER: ${{ vars.COLLECTIONS_FILTER }}
+          COLLECTION_IDS: ${{ vars.COLLECTION_IDS }}
           FULL_SYNC: ${{ inputs.full_sync == true && '1' || '' }}
         run: python3 sync.py
 

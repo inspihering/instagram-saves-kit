@@ -27,13 +27,36 @@ Ask the user: do you already have a Notion database set up for this with the req
 - If no: create a new database in the user's Notion (via a connected Notion integration if available, otherwise give the user manual create-it steps) with EXACTLY these properties:
   - `Name` (title)
   - `URL` (url)
-  - `Type` (select)
+  - `Type` (select: Post, Reel, Carousel, IGTV)
   - `Author` (text / rich_text)
-  - `Status` (select)
+  - `Status` (select: New, Reviewed, Used, Archived)
   - `Media ID` (text / rich_text)
   - `Saved` (date)
   - `Caption` (text / rich_text)
   - `Collection` (select)
+  - `Verdict` (select: Build, Recreate, Both, Skip)
+  - `Digest Note` (text / rich_text)
+  - `Process` (checkbox)
+  - `Hook`, `Format`, `Why It Worked`, `Steal`, `Notes` (text / rich_text)
+
+  The first nine are used by the sync; the rest by the digest and the
+  analysis stage (see `DIGEST.md`).
+
+Also create a second database, **Content Ideas**, where generated ideas land:
+  - `Name` (title), `Angle`, `Hook Options`, `Talking Points`, `CTA` (text)
+  - `Status` (status: Not started, In progress, Done)
+  - `Platform` (multi-select: Instagram, TikTok, YouTube)
+  - `Format` (select: Reel, Carousel, Short Video, Long-form Video)
+  - `Pillar` (select: Teach, Proof, Behind the Build, Objections, Problems, Process, Tools, Point of View, Personal; ask the user if they want different pillars)
+  - `Priority` (select: High, Medium, Low)
+  - `Created By` (select: Claude, ChatGPT)
+  - `Week Of` (date), `Source URL` (url), `Source Author` (text), `Grade` (number)
+
+And a plain page, **Brand Brief (Instagram Saves)**, with sections Business,
+Customer, Primary CTA, Strong Opinion / Wedge, Story Vault, Voice, Content
+Pillars. Fill it in with the user by asking, one at a time: what they sell;
+one real customer; the one action they want; a strong opinion most peers
+would push back on; one recent story or win; their voice in 2 or 3 traits.
 
 IMPORTANT: whether the database is new or existing, the integration must be connected to it. In Notion: open the database, click the `...` menu, go to Connections, and add the "Instagram Saves" integration.
 
@@ -48,13 +71,21 @@ Ask the user for each of these choices one at a time. Offer the default, never a
 1. **Which saved collections to sync?** All of them (default: leave `collections_filter` as `[]`), or specific ones (ask for the exact Instagram collection names as a JSON array).
 2. **What times should the daily sync run?** Default: 9am and 9pm (21:00). These become `{{HOUR_1}}` and `{{HOUR_2}}` in the scheduler.
 
+3. **Collection names.** Instagram no longer lists collections through its web
+   API, so collection names are only filled in when the ids are configured. After
+   the first sync, run `.venv/bin/python3 sync.py --discover-collections`, match
+   each id to a collection name in the Instagram app, and write the mapping into
+   `collection_ids`. Skip this if the user does not care about the Collection column.
+
 Write into `config.json`:
 - `ig_session_id`
 - `ig_csrftoken`
 - `ig_user_id`
 - `notion_token`
 - `notion_database_id`
+- `content_ideas_db_id`
 - `collections_filter`
+- `collection_ids`
 
 ## Step 4 - Install runtime
 
@@ -103,7 +134,11 @@ credentials from repository secrets instead of `config.json`.
    - `NOTION_TOKEN`
    - `NOTION_DATABASE_ID`
 2. Optional: under the Variables tab add `COLLECTIONS_FILTER` as a JSON array,
-   for example `["Inspo","Tools"]`. Leave it unset to sync every collection.
+   for example `["Inspo","Tools"]`, to sync only those collections, and
+   `COLLECTION_IDS` as a JSON object mapping names to ids, for example
+   `{"Inspo":"17841400000000000"}`, so the Collection column is filled in. Find
+   the ids with `sync.py --discover-collections` on any machine with a
+   `config.json`. Leave both unset to sync everything without collection names.
 3. The workflow must live on the default branch to run on its schedule. Open the
    Actions tab, pick "Daily Instagram sync", and use "Run workflow" once to
    confirm it goes green.

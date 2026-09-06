@@ -80,6 +80,12 @@ def load_config():
     except json.JSONDecodeError:
         log.error('COLLECTIONS_FILTER must be a JSON array, e.g. ["Inspo","Tools"]')
         sys.exit(1)
+    raw_ids = os.environ.get("COLLECTION_IDS", "").strip()
+    try:
+        config["collection_ids"] = json.loads(raw_ids) if raw_ids else {}
+    except json.JSONDecodeError:
+        log.error('COLLECTION_IDS must be a JSON object, e.g. {"Inspo": "1784...", "Tools": "1790..."}')
+        sys.exit(1)
     log.info("Loaded config from environment variables")
     return config
 
@@ -171,8 +177,16 @@ def fetch_saved_posts(session, known_ids=None, max_pages=200):
     return all_items
 
 
-def fetch_collection_map(session):
-    """Fetch collection ID → name mapping from Instagram."""
+def fetch_collection_map(session, config=None):
+    """Return a collection ID -> name mapping.
+
+    Instagram removed /api/v1/collections/list/ from the web API (it now
+    returns 404), so the reliable source is the "collection_ids" mapping
+    in config.json / COLLECTION_IDS, discovered with --discover-collections.
+    The API call is still attempted as a best-effort refresh on top.
+    """
+    config = config or {}
+    coll_map = {str(cid): name for name, cid in (config.get("collection_ids") or {}).items()}
     params = {
         "collection_types": '["ALL_MEDIA_AUTO_COLLECTION","PRODUCT_AUTO_COLLECTION","MEDIA"]',
         "get_cover_media_lists": "true",
@@ -180,10 +194,13 @@ def fetch_collection_map(session):
     }
     resp = session.get(f"{IG_BASE}/api/v1/collections/list/", params=params, timeout=IG_TIMEOUT)
     if resp.status_code != 200:
-        log.warning(f"Failed to fetch collections: HTTP {resp.status_code}")
-        return {}
+        if coll_map:
+            log.info(f"Collections API unavailable (HTTP {resp.status_code}); using {len(coll_map)} configured collection ids")
+        else:
+            log.warning(f"Collections API unavailable (HTTP {resp.status_code}) and no collection_ids configured; "
+                        "Collection will be left empty. Run sync.py --discover-collections to fix.")
+        return coll_map
     data = resp.json()
-    coll_map = {}
     for item in data.get("items", []):
         cid = str(item.get("collection_id", ""))
         cname = item.get("collection_name", "")
@@ -346,7 +363,7 @@ def sync():
 
     # Build collection filter
     filter_names = config.get("collections_filter", [])
-    collection_map = fetch_collection_map(session)
+    collection_map = fetch_collection_map(session, config)
     target_ids = None  # None = sync all
 
     if filter_names:
@@ -424,9 +441,49 @@ def sync():
     return new_count
 
 
+def discover_collections():
+    """Print the distinct collection IDs found in the saved feed.
+
+    Instagram no longer lists collections through the web API, so this is
+    how to find the ids: run it, match the sample authors to the collection
+    names in the Instagram app, then add the mapping to config.json under
+    "collection_ids" (or the COLLECTION_IDS repository variable).
+    """
+    config = load_config()
+    session = make_ig_session(config)
+    username = test_session(session)
+    if not username:
+        log.error("Instagram session is invalid or expired.")
+        sys.exit(1)
+    log.info(f"Logged in as @{username}")
+    log.info("Scanning the newest saved posts for collection ids...")
+
+    items = fetch_saved_posts(session, max_pages=10)
+    collections = {}
+    for item in items:
+        media = item.get("media", item)
+        author = media.get("user", {}).get("username", "?")
+        for cid in media.get("saved_collection_ids", []):
+            collections.setdefault(str(cid), []).append(author)
+
+    if not collections:
+        log.info("No collections found in the newest saves; they may all be uncategorised.")
+        return
+    log.info(f"Found {len(collections)} collection id(s):")
+    for cid, authors in sorted(collections.items(), key=lambda kv: -len(kv[1])):
+        sample = ", ".join(f"@{a}" for a in authors[:3])
+        log.info(f'  "{cid}"  ({len(authors)} saves, e.g. {sample})')
+    log.info("Match each id to a collection name in the Instagram app, then add")
+    log.info('{"collection_ids": {"Your Name": "id"}} to config.json, or set the')
+    log.info("COLLECTION_IDS repository variable to that JSON object for the cloud sync.")
+
+
 if __name__ == "__main__":
     try:
-        sync()
+        if "--discover-collections" in sys.argv:
+            discover_collections()
+        else:
+            sync()
     except KeyboardInterrupt:
         log.info("\nSync cancelled.")
     except Exception as e:
