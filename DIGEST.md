@@ -10,7 +10,7 @@ one is good for, emails a digest, and marks the posts `Reviewed`.
 or `Both` (and any post where you tick the `Process` checkbox by hand), it
 breaks down the hook against the free Blotato viral-hooks library, writes the
 analysis into the save's columns, and creates 3 original content ideas in
-your voice in the Content Ideas database, each with 3 hook variations,
+your voice in the Instagram Saves Content Ideas database, each with 3 hook variations,
 talking points, a CTA, an outline, and a virality grade.
 
 ## The email
@@ -37,7 +37,7 @@ Instagram Saves database:
 | `Hook`, `Format`, `Why It Worked`, `Steal` | text | Stage B |
 | `Notes` | text | You. Never touched by the pipeline |
 
-Content Ideas database (one page per idea): Name, Angle, Hook Options,
+Instagram Saves Content Ideas database (one page per idea): Name, Angle, Hook Options,
 Talking Points, CTA, Status, Platform, Format, Pillar, Priority, Created By,
 Week Of, Source URL, Source Author, Grade. The page body holds the outline
 under "Content Idea" and the score and top fix under "Grade".

@@ -24,8 +24,8 @@ Open this folder in Claude Code and say "set this up for me." Claude will follow
   result, and marks them reviewed in Notion.
 - For every save worth recreating, the same session analyses the hook against
   the free Blotato viral-hooks library, writes Hook / Format / Why It Worked /
-  Steal into the save, and creates 3 graded content ideas in your voice in a
-  Content Ideas database. Tick the `Process` checkbox on any save to queue it
+  Steal into the save, and creates 3 graded content ideas in your voice in the
+  Instagram Saves Content Ideas database. Tick the `Process` checkbox on any save to queue it
   by hand. `/instagram-process` runs the same stage on demand.
 
 ## Note
