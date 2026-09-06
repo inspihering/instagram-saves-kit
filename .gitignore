@@ -6,3 +6,6 @@ launchd-stdout.log
 launchd-stderr.log
 .venv/
 __pycache__/
+brand-brief.md
+analysis*.json
+idea*.json
