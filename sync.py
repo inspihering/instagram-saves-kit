@@ -123,7 +123,7 @@ def test_session(session):
     return None
 
 
-def fetch_saved_posts(session, known_ids=None, max_pages=50):
+def fetch_saved_posts(session, known_ids=None, max_pages=200):
     """Fetch saved posts using Instagram's web REST API.
 
     Instagram returns saves newest-first. When known_ids is given, stop as
@@ -363,9 +363,16 @@ def sync():
             log.error("No matching collections found. Check collections_filter in config.json.")
             sys.exit(1)
 
-    # Fetch all saved posts
-    log.info("Fetching saved posts...")
-    all_items = fetch_saved_posts(session, known_ids=synced_ids)
+    # Fetch saved posts. A normal run stops at the first page that is fully
+    # synced. FULL_SYNC=1 walks the whole list, which is needed to finish a
+    # backfill that was interrupted part-way through.
+    full_sync = os.environ.get("FULL_SYNC", "").strip().lower() in ("1", "true", "yes")
+    if full_sync:
+        log.info("Fetching saved posts (full walk, FULL_SYNC set)...")
+        all_items = fetch_saved_posts(session)
+    else:
+        log.info("Fetching saved posts...")
+        all_items = fetch_saved_posts(session, known_ids=synced_ids)
     log.info(f"Total saved items: {len(all_items)}")
 
     new_count = 0

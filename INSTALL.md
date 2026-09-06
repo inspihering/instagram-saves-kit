@@ -113,6 +113,13 @@ Mac schedule can stay on as a backup, but the Mac must be running this version
 of `sync.py` (or later). An older copy that only checks `state.json` will
 create duplicates of posts the cloud synced first.
 
+A routine run stops paging as soon as it reaches a page of posts Notion already
+has, so it usually finishes in under a minute. If a run was interrupted part-way
+through a large backfill, older posts can be left behind below that first
+synced page. To catch them, run the workflow by hand with the "full_sync" box
+ticked (or set `FULL_SYNC=1` when running `sync.py` locally). A full walk of a
+few thousand saves takes 20 to 40 minutes.
+
 When the Instagram cookies expire, update both `config.json` on the Mac and the
 two GitHub secrets.
 

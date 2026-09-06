@@ -7,6 +7,11 @@ on:
   schedule:
     - cron: "30 10 * * *"
   workflow_dispatch:
+    inputs:
+      full_sync:
+        description: "Walk the entire saved list instead of stopping at already-synced posts"
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -38,6 +43,7 @@ jobs:
           NOTION_TOKEN: ${{ secrets.NOTION_TOKEN }}
           NOTION_DATABASE_ID: ${{ secrets.NOTION_DATABASE_ID }}
           COLLECTIONS_FILTER: ${{ vars.COLLECTIONS_FILTER }}
+          FULL_SYNC: ${{ inputs.full_sync == true && '1' || '' }}
         run: python3 sync.py
 
       - name: Upload sync log
