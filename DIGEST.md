@@ -32,6 +32,13 @@ An email to the account owner with:
 These properties were added on top of the base schema in INSTALL.md. The sync
 script never touches them, so the Mac and cloud syncs are unaffected.
 
+## Creating the Routine
+
+The Routine has to be created from the claude.ai interface so the Notion and
+Gmail connectors can be attached to it (connectors cannot be attached from
+inside a coding session). The full prompt to paste is in
+`digest-routine-prompt.md`.
+
 ## Schedule
 
 | Job | Where | Time (UTC) | Central (CDT / CST) |
