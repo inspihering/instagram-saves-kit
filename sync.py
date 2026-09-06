@@ -53,12 +53,18 @@ ENV_KEYS = {
 }
 
 
+def _clean(config):
+    """Strip stray whitespace/newlines that sneak in when values are pasted."""
+    return {k: (v.strip() if isinstance(v, str) else v) for k, v in config.items()}
+
+
 def load_config():
     if CONFIG_FILE.exists():
         with open(CONFIG_FILE) as f:
-            return json.load(f)
+            return _clean(json.load(f))
 
     config = {key: os.environ.get(env, "") for key, env in ENV_KEYS.items()}
+    config = _clean(config)
     missing = [env for key, env in ENV_KEYS.items() if not config[key]]
     if missing:
         log.error(f"Config file not found: {CONFIG_FILE}")
