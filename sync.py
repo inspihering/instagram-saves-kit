@@ -29,6 +29,7 @@ LOG_FILE = SCRIPT_DIR / "sync.log"
 # Instagram web API constants
 IG_BASE = "https://www.instagram.com"
 IG_APP_ID = "936619743392459"
+IG_TIMEOUT = 30  # seconds per HTTP request; a hung request should not stall a scheduled run
 
 # Logging
 logging.basicConfig(
@@ -114,7 +115,7 @@ def make_ig_session(config):
 
 def test_session(session):
     """Test if the Instagram session is valid."""
-    resp = session.get(f"{IG_BASE}/api/v1/accounts/edit/web_form_data/")
+    resp = session.get(f"{IG_BASE}/api/v1/accounts/edit/web_form_data/", timeout=IG_TIMEOUT)
     if resp.status_code == 200:
         data = resp.json()
         username = data.get("form_data", {}).get("username", "unknown")
@@ -132,7 +133,7 @@ def fetch_saved_posts(session, max_pages=50):
         if max_id:
             params["max_id"] = max_id
 
-        resp = session.get(f"{IG_BASE}/api/v1/feed/saved/posts/", params=params)
+        resp = session.get(f"{IG_BASE}/api/v1/feed/saved/posts/", params=params, timeout=IG_TIMEOUT)
         if resp.status_code != 200:
             log.error(f"Failed to fetch saved posts (page {page + 1}): HTTP {resp.status_code}")
             log.error(f"Response: {resp.text[:300]}")
@@ -162,7 +163,7 @@ def fetch_collection_map(session):
         "get_cover_media_lists": "true",
         "include_public_only": "0",
     }
-    resp = session.get(f"{IG_BASE}/api/v1/collections/list/", params=params)
+    resp = session.get(f"{IG_BASE}/api/v1/collections/list/", params=params, timeout=IG_TIMEOUT)
     if resp.status_code != 200:
         log.warning(f"Failed to fetch collections: HTTP {resp.status_code}")
         return {}
