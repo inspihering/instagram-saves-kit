@@ -1,0 +1,49 @@
+name: Daily Instagram sync
+
+# Runs the Instagram -> Notion sync in the cloud so it does not depend on a
+# Mac being awake. Times are UTC. 10:30 UTC is 5:30 AM Central during daylight
+# time (CDT) and 4:30 AM Central in winter (CST); the digest follows 30 min later.
+on:
+  schedule:
+    - cron: "30 10 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: instagram-saves-sync
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Sync saved posts to Notion
+        env:
+          IG_SESSION_ID: ${{ secrets.IG_SESSION_ID }}
+          IG_CSRFTOKEN: ${{ secrets.IG_CSRFTOKEN }}
+          IG_USER_ID: ${{ secrets.IG_USER_ID }}
+          NOTION_TOKEN: ${{ secrets.NOTION_TOKEN }}
+          NOTION_DATABASE_ID: ${{ secrets.NOTION_DATABASE_ID }}
+          COLLECTIONS_FILTER: ${{ vars.COLLECTIONS_FILTER }}
+        run: python3 sync.py
+
+      - name: Upload sync log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sync-log
+          path: sync.log
+          retention-days: 14
