@@ -9,3 +9,6 @@ __pycache__/
 brand-brief.md
 analysis*.json
 idea*.json
+.env
+.env.local
+.env.*.local
