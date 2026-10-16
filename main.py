@@ -36,8 +36,14 @@ def main():
     def on_enqueue(request_id):
         print(f'Request queued: {request_id}')
 
+    last_status = None
+
     def on_queue_update(status):
-        print(f'Status: {type(status).__name__}')
+        nonlocal last_status
+        name = type(status).__name__
+        if name != last_status:
+            print(f'Status: {name}')
+            last_status = name
 
     try:
         result = higgsfield_client.subscribe(
